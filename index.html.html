@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⭐ Звезды Telegram - Магазин</title>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 20px 16px 32px;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .title {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFD966, #FF8C42);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .balance {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            padding: 8px 16px;
+            border-radius: 40px;
+            font-weight: 700;
+        }
+        
+        .pack {
+            background: var(--tg-theme-secondary-bg-color, #f8f9fc);
+            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .pack.selected {
+            border: 2px solid #FFD966;
+            background: rgba(255, 217, 102, 0.1);
+        }
+        
+        .pack-info h3 {
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+        
+        .pack-info p {
+            color: var(--tg-theme-hint-color, #6c757d);
+            font-size: 14px;
+        }
+        
+        .buy-button {
+            background: var(--tg-theme-button-color, #40a7e3);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .payment-info {
+            background: var(--tg-theme-secondary-bg-color, #f2f3f7);
+            border-radius: 20px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .wallet-address {
+            background: #1e1e2f20;
+            padding: 12px;
+            border-radius: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        
+        button {
+            cursor: pointer;
+        }
+        
+        .confirm-btn {
+            background: #FFD966;
+            border: none;
+            padding: 14px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 16px;
+            margin-top: 15px;
+            width: 100%;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2d2f36;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div class="title">⭐ StarShop</div>
+        <div class="balance">⭐ <span id="balance">0</span></div>
+    </div>
+    
+    <div id="packs"></div>
+    
+    <div id="paymentBlock" class="payment-info hidden">
+        <h3>💸 Оплата через TON</h3>
+        <p>Переведите <strong id="amount">0</strong> USDT на кошелек:</p>
+        <div class="wallet-address" id="walletAddress">UQCm-f3_ujSqAvXRZG_4IvtUzaH5lB4BUOGX9_ow1reazVIY</div>
+        <button onclick="copyAddress()">📋 Скопировать адрес</button>
+        <button id="confirmPayment" class="confirm-btn">✅ Я оплатил(а)</button>
+        <p style="font-size: 12px; margin-top: 15px;">
+            💡 После перевода нажмите «Я оплатил».<br>
+            Звезды зачислятся автоматически в течение 2-5 минут.
+        </p>
+    </div>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.ready();
+    
+    const SELLER_WALLET = "UQCm-f3_ujSqAvXRZG_4IvtUzaH5lB4BUOGX9_ow1reazVIY";
+    
+    const PACKS = [
+        { id: 1, stars: 50, price: 1.2, label: "50 ⭐" },
+        { id: 2, stars: 150, price: 3.2, label: "150 ⭐" },
+        { id: 3, stars: 350, price: 7.0, label: "350 ⭐" },
+        { id: 4, stars: 750, price: 14.5, label: "750 ⭐" },
+        { id: 5, stars: 1500, price: 28.0, label: "1500 ⭐ + бонус" }
+    ];
+    
+    let selectedPack = null;
+    let userBalance = 10;
+    
+    function showToast(msg) {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
+    }
+    
+    function copyAddress() {
+        navigator.clipboard.writeText(SELLER_WALLET);
+        showToast("✅ Адрес скопирован");
+        tg.HapticFeedback.impactOccurred('light');
+    }
+    
+    function selectPack(pack) {
+        selectedPack = pack;
+        document.querySelectorAll('.pack').forEach(p => p.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        
+        document.getElementById('paymentBlock').classList.remove('hidden');
+        document.getElementById('amount').textContent = `${pack.price} USDT`;
+        showToast(`Выбран пакет: ${pack.stars} звезд`);
+    }
+    
+    function confirmPayment() {
+        if (!selectedPack) {
+            showToast("❌ Сначала выберите пакет");
+            return;
+        }
+        
+        tg.showConfirm(`Вы отправили ${selectedPack.price} USDT на кошелек ${SELLER_WALLET.slice(0, 6)}...?`, (ok) => {
+            if (ok) {
+                // Отправляем данные боту
+                tg.sendData(JSON.stringify({
+                    action: "payment_confirmed",
+                    pack_id: selectedPack.id,
+                    stars_amount: selectedPack.stars,
+                    price_usdt: selectedPack.price
+                }));
+                
+                showToast("✅ Заявка принята! Звезды зачислятся через 2-5 минут");
+                document.getElementById('paymentBlock').classList.add('hidden');
+                selectedPack = null;
+            }
+        });
+    }
+    
+    // Рендер пакетов
+    const container = document.getElementById('packs');
+    PACKS.forEach(pack => {
+        const div = document.createElement('div');
+        div.className = 'pack';
+        div.onclick = () => selectPack(pack);
+        div.innerHTML = `
+            <div class="pack-info">
+                <h3>⭐ ${pack.stars} звезд</h3>
+                <p>≈ ${pack.price} USDT (TON)</p>
+            </div>
+            <button class="buy-button">Выбрать</button>
+        `;
+        container.appendChild(div);
+    });
+    
+    document.getElementById('confirmPayment').onclick = confirmPayment;
+    
+    // Получаем баланс из Telegram (можно запросить у бота)
+    if (tg.initDataUnsafe?.user) {
+        // Здесь можно сделать запрос к боту для получения баланса
+    }
+</script>
+</body>
+</html>
